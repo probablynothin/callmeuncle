@@ -6,7 +6,14 @@ from google import genai
 from google.genai import types
 from google.genai.live import AsyncSession
 
-from functions.getWeather import get_weather, get_weather_tool
+from functions.storeAddress import (
+    add_complaint,
+    add_complaint_tool,
+    check_for_complaint,
+    check_for_complaint_tool,
+    get_complaint_details,
+    get_complaint_details_tool,
+)
 
 load_dotenv()
 
@@ -26,20 +33,49 @@ async def receive_data(session: AsyncSession):
                     args = function_call.args
                     # Extract the numeric part from Gemini's function call ID
                     call_id = function_call.id
-                    if name == "get_weather":
+                    if name == "check_for_complaint":
                         if not args:
-                            print("Missing required parameter 'location'")
+                            print("Missing required parameter 'name'")
                             continue
-                        location = args["location"]
-                        temperature = get_weather(location)
+                        argname = args["name"]
+                        boolean = check_for_complaint(argname)
                         function_responses.append(
                             {
-                                "name": "get_weather",
-                                "response": {"temperature": temperature},
+                                "name": "check_for_complaint",
+                                "response": {"exists": boolean},
                                 "id": call_id,
                             }
                         )
+                    elif name == "add_complaint":
+                        if not args:
+                            print("Missing required parameters 'name' and 'address'")
+                            continue
+                        argname = args["name"]
+                        argaddress = args["address"]
 
+                        add_complaint(argname, argaddress)
+                        response = f"Stored the address of {argname} as {argaddress}"
+                        function_responses.append(
+                            {
+                                "name": "add_complaint",
+                                "response": {"response": response},
+                                "id": call_id,
+                            }
+                        )
+                    elif name == "get_complaint_details":
+                        if not args:
+                            print("Missing required parameter 'name'")
+                            continue
+                        argname = args["name"]
+                        address = get_complaint_details(argname)
+
+                        function_responses.append(
+                            {
+                                "name": "get_complaint_details",
+                                "response": {"name": argname, "address": address},
+                                "id": call_id,
+                            }
+                        )
                     else:
                         print(f"Unknown function name: {function_call.name}")
 
@@ -55,11 +91,21 @@ async def main():
         model="gemini-2.0-flash-exp",
         config=types.LiveConnectConfig(
             response_modalities=["TEXT"],
-            tools=[types.Tool(function_declarations=[get_weather_tool])],
+            tools=[
+                types.Tool(
+                    function_declarations=[
+                        add_complaint_tool,
+                        check_for_complaint_tool,
+                        get_complaint_details_tool,
+                    ]
+                )
+            ],
             system_instruction=types.Content(
                 parts=[
                     types.Part(
-                        text="You Are a Helpful Assitant named Doug , introduce yourself and help find weather information for the user"
+                        text="You are a Customer Representative named Om"
+                        ", Check for complaints and help store the names and addresses of customers, "
+                        "who want to register a complaint, and help check if a complaint already exists."
                     )
                 ]
             ),
