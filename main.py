@@ -19,67 +19,84 @@ load_dotenv()
 
 
 async def receive_data(session: AsyncSession):
-    print("Gemini: ", end="")
-    async for response in session.receive():
-        if response.text:
-            print(response.text, end="")
-        elif response.tool_call:
-            print("tool call received", response.tool_call)
+    while True:
+        async for response in session.receive():
+            if response.text:
+                print(response.text, end="")
+            elif response.tool_call:
+                print("tool call received", response.tool_call)
 
-            function_responses = []
-            if response.tool_call.function_calls:
-                for function_call in response.tool_call.function_calls:
-                    name = function_call.name
-                    args = function_call.args
-                    # Extract the numeric part from Gemini's function call ID
-                    call_id = function_call.id
-                    if name == "check_for_complaint":
-                        if not args:
-                            print("Missing required parameter 'name'")
-                            continue
-                        argname = args["name"]
-                        boolean = check_for_complaint(argname)
-                        function_responses.append(
-                            {
-                                "name": "check_for_complaint",
-                                "response": {"exists": boolean},
-                                "id": call_id,
-                            }
-                        )
-                    elif name == "add_complaint":
-                        if not args:
-                            print("Missing required parameters 'name' and 'address'")
-                            continue
-                        argname = args["name"]
-                        argaddress = args["address"]
+                function_responses = []
+                if response.tool_call.function_calls:
+                    for function_call in response.tool_call.function_calls:
+                        name = function_call.name
+                        args = function_call.args
+                        # Extract the numeric part from Gemini's function call ID
+                        call_id = function_call.id
+                        if name == "check_for_complaint":
+                            if not args:
+                                print("Missing required parameter 'name'")
+                                continue
+                            argname = args["name"]
+                            boolean = check_for_complaint(argname)
+                            function_responses.append(
+                                {
+                                    "name": "check_for_complaint",
+                                    "response": {"exists": boolean},
+                                    "id": call_id,
+                                }
+                            )
+                        elif name == "add_complaint":
+                            if not args:
+                                print(
+                                    "Missing required parameters 'name' and 'address'"
+                                )
+                                continue
+                            argname = args["name"]
+                            argaddress = args["address"]
 
-                        add_complaint(argname, argaddress)
-                        response = f"Stored the address of {argname} as {argaddress}"
-                        function_responses.append(
-                            {
-                                "name": "add_complaint",
-                                "response": {"response": response},
-                                "id": call_id,
-                            }
-                        )
-                    elif name == "get_complaint_details":
-                        if not args:
-                            print("Missing required parameter 'name'")
-                            continue
-                        argname = args["name"]
-                        address = get_complaint_details(argname)
+                            add_complaint(argname, argaddress)
+                            response = (
+                                f"Stored the address of {argname} as {argaddress}"
+                            )
+                            function_responses.append(
+                                {
+                                    "name": "add_complaint",
+                                    "response": {"response": response},
+                                    "id": call_id,
+                                }
+                            )
+                        elif name == "get_complaint_details":
+                            if not args:
+                                print("Missing required parameter 'name'")
+                                continue
+                            argname = args["name"]
+                            address = get_complaint_details(argname)
 
-                        function_responses.append(
-                            {
-                                "name": "get_complaint_details",
-                                "response": {"name": argname, "address": address},
-                                "id": call_id,
-                            }
-                        )
-                    else:
-                        print(f"Unknown function name: {function_call.name}")
+                            function_responses.append(
+                                {
+                                    "name": "get_complaint_details",
+                                    "response": {"name": argname, "address": address},
+                                    "id": call_id,
+                                }
+                            )
+                        else:
+                            print(f"Unknown function name: {function_call.name}")
 
-            await session.send(function_responses)
+                await session.send(function_responses)
+
+
+async def send_data(session: AsyncSession):
+    while True:
+        user_input = input("You: ")
+
+        if user_input.lower() in ["exit", "quit"]:
+            await session.close()
+            print("Chatbot: Goodbye!")
+            break
+
+        # Generate a response from the model
+        await session.send(user_input, end_of_turn=True)
 
 
 async def main():
@@ -90,7 +107,7 @@ async def main():
     async with client.aio.live.connect(
         model="gemini-2.0-flash-exp",
         config=types.LiveConnectConfig(
-            response_modalities=["TEXT"],
+            response_modalities=["AUDIO"],
             tools=[
                 types.Tool(
                     function_declarations=[
@@ -112,17 +129,11 @@ async def main():
         ),
     ) as session:
         session: AsyncSession = session
-        while True:
-            user_input = input("You: ")
 
-            if user_input.lower() in ["exit", "quit"]:
-                await session.close()
-                print("Chatbot: Goodbye!")
-                break
+        sendtask = asyncio.create_task(send_data(session))
+        recieve_task = asyncio.create_task(receive_data(session))
 
-            # Generate a response from the model
-            await session.send(user_input, end_of_turn=True)
-            await receive_data(session)
+        await asyncio.gather(sendtask, recieve_task)
 
 
 if __name__ == "__main__":

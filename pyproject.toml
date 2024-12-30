@@ -10,6 +10,8 @@ python = "^3.12"
 google-genai = "^0.3.0"
 asyncio = "^3.4.3"
 python-dotenv = "^1.0.1"
+numpy = "^2.2.1"
+sounddevice = "^0.5.1"
 
 
 [build-system]
