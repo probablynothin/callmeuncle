@@ -6,6 +6,9 @@ from google import genai
 from google.genai import types
 from google.genai.live import AsyncSession
 
+from server.main import (app)
+import threading
+
 from functions.storeAddress import (
     add_complaint,
     add_complaint_tool,
@@ -81,8 +84,9 @@ async def receive_data(session: AsyncSession):
 
             await session.send(function_responses)
 
+sessions = []
 
-async def main():
+async def start_gemini_session():
     client = genai.Client(
         api_key=os.getenv("GEMINI_API_KEY"),
         http_options={"api_version": "v1alpha"},
@@ -124,6 +128,9 @@ async def main():
             await session.send(user_input, end_of_turn=True)
             await receive_data(session)
 
+def main():
+    app.run(port=5000)
+
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
